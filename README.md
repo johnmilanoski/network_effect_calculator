@@ -1,69 +1,42 @@
-# React + TypeScript + Vite
+# Education Platform Network Calculator
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This is a sophisticated calculator built with React and TypeScript to model and simulate the financial progression and network effects of a multi-level education platform. It allows users to configure a wide range of parameters to project potential earnings, graduation timelines, and overall network growth.
 
-Currently, two official plugins are available:
+## Key Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+*   **Dynamic Course Configuration**: Add, remove, and price an unlimited number of courses.
+*   **Adjustable Network Parameters**: Control the network multiplier, number of payout levels, and commission percentages (both uniform and per-level).
+*   **Target Reserve System**: Simulate a "savings" mechanism where a percentage of earnings is reserved to automatically fund the next course.
+*   **Per-Course Snapshot**: View a detailed breakdown for each course, calculating the network size required to "graduate" and the potential wallet earnings.
+*   **Time Series Simulation**: Project your entire journey over a set number of periods (e.g., weeks), showing course unlocks, periodic earnings, and cumulative wallet growth.
+*   **Full Cascade Snapshot**: A theoretical model that calculates the total network size and depth required for a sponsor's entire downline to progress through all courses.
 
-## Expanding the ESLint configuration
+## How to Use the Calculator
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+1.  **Configure Settings**: Click the "Settings" button to adjust global parameters like course prices, the network multiplier, and commission structures.
+2.  **Analyze Course Progression**: The top visualization bar shows the network depth required to graduate from one course to the next.
+3.  **View Detailed Breakdowns**: Click the tabs for "Course 1", "Course 2", etc., to see detailed statistics for that specific stage, including the students needed to hit your target and your projected wallet earnings.
+4.  **Project Over Time**: Click the "Time Simulation" tab to see a table projecting your growth and earnings period-by-period.
 
-```js
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Local Development
 
-      // Remove tseslint.configs.recommended and replace with this
-      ...tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      ...tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      ...tseslint.configs.stylisticTypeChecked,
+This project was set up using Vite.
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### 1. Install Dependencies
+```bash
+npm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### 2. Run the Development Server
+```bash
+npm run dev
 ```
+
+This will start the application on a local server, usually `http://localhost:5173`.
+
+### 3. Build for Production
+```bash
+npm run build
+```
+
+This command compiles the application into static HTML, CSS, and JavaScript files in the `dist/` directory, which are ready for deployment to a web server.
