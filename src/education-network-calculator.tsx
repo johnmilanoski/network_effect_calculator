@@ -309,9 +309,10 @@ const EducationNetworkCalculator = () => {
     const series: TimePeriodData[] = [];
     if (courses.length === 0) return series;
 
-    // Simulation state
-    const unlockedCourseStatus = new Array(courses.length).fill(false);
+    // Simulation state for the "Cascading Release" model
+    let unlockedCourseStatus = new Array(courses.length).fill(false);
     unlockedCourseStatus[0] = true;
+    
     const networkDepths = new Array(courses.length).fill(0);
     const targetSavings = new Array(courses.length).fill(0);
     let cumulativeWallet = 0;
@@ -324,16 +325,17 @@ const EducationNetworkCalculator = () => {
         let newStudentsThisPeriod = 0;
 
         for (let i = 0; i < courses.length; i++) {
+            const course = courses[i];
+            periodEarnings[course.name] = 0;
+
             if (!unlockedCourseStatus[i]) {
-                periodEarnings[courses[i].name] = 0;
                 continue;
             }
 
-            // Grow the network by one level
+            // Grow the network for this course by one level
             networkDepths[i]++;
             const newLevel = networkDepths[i];
             
-            // Calculate earnings from this new level only
             const studentsInNewLevel = Math.pow(settings.multiplier, newLevel);
 
             if (i === 0) { // This is Course 1
@@ -342,22 +344,36 @@ const EducationNetworkCalculator = () => {
             }
 
             const percentage = newLevel <= settings.payoutLevels ? (effectivePercentages[newLevel - 1] || 0) : 0;
-            const commissionFromNewLevel = studentsInNewLevel * ((courses[i].price * percentage) / 100);
+            const commissionFromNewLevel = studentsInNewLevel * ((course.price * percentage) / 100);
 
-            periodEarnings[courses[i].name] = commissionFromNewLevel;
+            periodEarnings[course.name] = commissionFromNewLevel;
             totalPeriodEarnings += commissionFromNewLevel;
 
-            // Allocate earnings
+            // --- Cascading Release Logic ---
             const isFinalCourse = i === courses.length - 1;
-            const nextCourseUnlocked = isFinalCourse || unlockedCourseStatus[i + 1];
+            const nextCourseIndex = i + 1;
 
-            if (!isFinalCourse && !nextCourseUnlocked) {
+            // If this is the final course OR the next course is already unlocked, release earnings to wallet
+            if (isFinalCourse || unlockedCourseStatus[nextCourseIndex]) {
+                cumulativeWallet += commissionFromNewLevel;
+            } else {
+                // Otherwise, contribute to savings for the next course
                 const toReserve = commissionFromNewLevel * reserveRatio;
                 const toWallet = commissionFromNewLevel * (1 - reserveRatio);
-                targetSavings[i] += toReserve;
-                cumulativeWallet += toWallet;
-            } else {
-                cumulativeWallet += commissionFromNewLevel;
+                
+                const targetPrice = courses[nextCourseIndex].price;
+                const neededForTarget = targetPrice - targetSavings[i];
+                
+                if (toReserve >= neededForTarget) {
+                    // Goal met this period!
+                    const overflow = toReserve - neededForTarget;
+                    targetSavings[i] = targetPrice; // Cap savings at target price
+                    cumulativeWallet += overflow; // Add overflow to wallet
+                    cumulativeWallet += toWallet; // Add non-reserved portion
+                } else {
+                    targetSavings[i] += toReserve;
+                    cumulativeWallet += toWallet;
+                }
             }
         }
 
