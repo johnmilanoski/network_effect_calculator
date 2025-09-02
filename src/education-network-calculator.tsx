@@ -67,8 +67,10 @@ interface TimePeriodData {
     [courseName: string]: { earnings: number; reserve: number } 
   };
   totalPeriodEarnings: number;
+  totalPeriodReserveEarnings: number;
   cumulativeWallet: number;
   cumulativeReserveWallet: number;
+  reserveSpentOnGraduation: number;
   unlockedCourses: string[];
   newStudents: number;
   totalStudents: number;
@@ -88,11 +90,11 @@ const EducationNetworkCalculator = () => {
 
   const [settings, setSettings] = useState<Settings>({
     multiplier: 3,
-    percentages: new Array(10).fill(15),
-    useUniformPercentage: true,
+    percentages: [0, 6, 15, 25, 25, 25],
+    useUniformPercentage: false,
     uniformPercentage: 15,
-    reservePercentages: new Array(10).fill(5),
-    useUniformReservePercentage: true,
+    reservePercentages: [0, 5, 45, 45, 0, 0],
+    useUniformReservePercentage: false,
     uniformReservePercentage: 5,
     payoutLevels: 6, // How many levels actually get paid
     reservePercentage: 100, // Percentage of earnings held to meet target
@@ -127,66 +129,6 @@ const EducationNetworkCalculator = () => {
     }
     return customPercentages.slice(0, settings.payoutLevels);
   }, [settings.useUniformReservePercentage, settings.uniformReservePercentage, settings.payoutLevels, settings.reservePercentages]);
-
-
-  const calculateNetworkLevels = (coursePrice: number, targetAmount: number, percentages: number[], multiplier: number, payoutLevels: number, displayLevels: number, reservePercentage: number): NetworkLevelResult => {
-    const levels: LevelData[] = [];
-    let totalEarnings = 0;
-    let accumulatedForTarget = 0;
-    let targetMet = false;
-    let targetLevel = -1;
-    let studentsAtTargetLevel = 0;
-    const reserveRatio = reservePercentage / 100;
-    
-    for (let level = 1; level <= displayLevels; level++) {
-      const studentsAtLevel = Math.pow(multiplier, level);
-      const levelIndex = level - 1;
-      
-      // Only apply percentage if within payout levels, otherwise 0%
-      const percentage = level <= payoutLevels ? (percentages[levelIndex] || 0) : 0;
-      const totalCommissionPerStudent = (coursePrice * percentage) / 100;
-      const levelEarnings = studentsAtLevel * totalCommissionPerStudent;
-      const earningsForTargetPerStudent = totalCommissionPerStudent * reserveRatio;
-      
-      if (!targetMet && earningsForTargetPerStudent > 0 && targetAmount > 0) {
-        const remainingNeeded = targetAmount - accumulatedForTarget;
-        if (remainingNeeded <= (levelEarnings * reserveRatio)) {
-          targetMet = true;
-          targetLevel = level;
-          studentsAtTargetLevel = Math.ceil(remainingNeeded / earningsForTargetPerStudent);
-        }
-      }
-      
-      accumulatedForTarget += levelEarnings * reserveRatio;
-      totalEarnings += levelEarnings;
-      
-      levels.push({
-        level,
-        students: studentsAtLevel,
-        percentage,
-        earningsPerStudent: totalCommissionPerStudent,
-        levelEarnings,
-        totalEarnings,
-        targetMet: targetAmount > 0 && accumulatedForTarget >= targetAmount,
-        isPaidLevel: level <= payoutLevels
-      });
-    }
-
-    let totalNeeded = 0;
-    if (targetLevel > 0) {
-      for (let i = 0; i < targetLevel - 1; i++) {
-        totalNeeded += levels[i].students;
-      }
-      totalNeeded += studentsAtTargetLevel;
-    }
-
-    return {
-      levels,
-      targetLevel,
-      studentsAtTargetLevel,
-      totalStudentsNeeded: totalNeeded
-    };
-  };
 
   const calculateCombinedNetworkLevels = (
     mainCoursePrice: number,
@@ -376,14 +318,16 @@ const EducationNetworkCalculator = () => {
         // For preceding courses, calculate the depth needed to earn the price of the next course.
         const nextCourse = courses[i + 1];
         const target = nextCourse.price;
-        const result = calculateNetworkLevels(
+        const result = calculateCombinedNetworkLevels(
           currentCourse.price,
+          currentCourse.reservePrice,
           target,
           effectivePercentages,
+          effectiveReservePercentages,
           settings.multiplier,
           settings.payoutLevels,
           CALCULATION_LEVEL_LIMIT,
-          settings.reservePercentage
+          settings.reservePercentage / 100
         );
         stepDepth = result.targetLevel > 0 ? result.targetLevel : 0;
         trigger = `To graduate from ${currentCourse.name} to ${nextCourse.name}`;
@@ -399,7 +343,7 @@ const EducationNetworkCalculator = () => {
     }
 
     return { totalNetworkSize, totalRequiredDepth, depthDetails };
-  }, [courses, settings, effectivePercentages]);
+  }, [courses, settings, effectivePercentages, effectiveReservePercentages]);
 
   const timeSeriesData: TimePeriodData[] = useMemo(() => {
     const series: TimePeriodData[] = [];
@@ -419,7 +363,9 @@ const EducationNetworkCalculator = () => {
     for (let period = 1; period <= settings.numberOfPeriods; period++) {
         const coursePeriodDetails: { [courseName: string]: { earnings: number; reserve: number } } = {};
         let totalPeriodEarnings = 0;
+        let totalPeriodReserveEarnings = 0;
         let newStudentsThisPeriod = 0;
+        let reserveSpentOnGraduationThisPeriod = 0;
 
         for (let i = 0; i < courses.length; i++) {
             const course = courses[i];
@@ -447,17 +393,21 @@ const EducationNetworkCalculator = () => {
             const percentage = newLevel <= settings.payoutLevels ? (effectivePercentages[newLevel - 1] || 0) : 0;
             const reservePercentage = newLevel <= settings.payoutLevels ? (effectiveReservePercentages[newLevel - 1] || 0) : 0;
 
+            const isFinalCourse = i === courses.length - 1;
+
             const mainCommission = studentsInNewLevel * ((course.price * percentage) / 100);
-            const reserveCommission = studentsInNewLevel * ((course.reservePrice * reservePercentage) / 100);
+            const reserveCommission = isFinalCourse ? 0 : studentsInNewLevel * ((course.reservePrice * reservePercentage) / 100);
 
             // Always add reserve commission to the global reserve wallet
             cumulativeReserveWallet += reserveCommission;
+
+
+            totalPeriodReserveEarnings += reserveCommission;
 
             coursePeriodDetails[course.name] = { earnings: mainCommission, reserve: reserveCommission };
             totalPeriodEarnings += mainCommission; // Total earnings for display still refers to main commission
 
             // --- Cascading Release Logic ---
-            const isFinalCourse = i === courses.length - 1;
             const nextCourseIndex = i + 1;
 
             // If this is the final course OR the next course is already unlocked, release earnings to wallet
@@ -494,6 +444,7 @@ const EducationNetworkCalculator = () => {
                     const contributionFromReserve = Math.min(neededForTarget, cumulativeReserveWallet);
                     targetSavings[i] += contributionFromReserve;
                     cumulativeReserveWallet -= contributionFromReserve;
+                    reserveSpentOnGraduationThisPeriod += contributionFromReserve;
                 }
 
                 if (targetSavings[i] >= targetPrice) {
@@ -506,8 +457,10 @@ const EducationNetworkCalculator = () => {
             period,
             coursePeriodDetails: coursePeriodDetails,
             totalPeriodEarnings,
+            totalPeriodReserveEarnings,
             cumulativeWallet,
             cumulativeReserveWallet,
+            reserveSpentOnGraduation: reserveSpentOnGraduationThisPeriod,
             unlockedCourses: courses.filter((_, i) => unlockedCourseStatus[i]).map(c => c.name),
             newStudents: newStudentsThisPeriod,
             totalStudents: totalStudentsInCourse1,
@@ -827,19 +780,29 @@ const EducationNetworkCalculator = () => {
                       </td>
                     )
                   })}
-                  <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-blue-600">
-                    ${data.totalPeriodEarnings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  <td className="px-4 py-3 whitespace-nowrap text-sm">
+                    <div className="font-semibold text-blue-600">
+                      ${data.totalPeriodEarnings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                    <div className="text-xs text-purple-600">
+                      +${data.totalPeriodReserveEarnings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Reserve
+                    </div>
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-gray-800">
-                    <div>
-                      ${data.cumulativeWallet.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">
+                    <div className="flex justify-between items-baseline">
+                      <span className="font-bold">${data.cumulativeWallet.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      <span className="text-xs font-normal text-purple-600">Reserve: ${data.cumulativeReserveWallet.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
                     <div className="text-xs font-normal text-gray-500">
                       <span>Growth: +{data.newStudents.toLocaleString()}</span>
                       <span className="mx-1">|</span>
                       <span>Total: {data.totalStudents.toLocaleString()}</span>
-                      <span className="mx-1">|</span>
-                      <span className="text-purple-600">Reserve: ${data.cumulativeReserveWallet.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      {data.reserveSpentOnGraduation > 0 && (
+                        <>
+                          <span className="mx-1">|</span>
+                          <span className="text-red-500">Used: -${data.reserveSpentOnGraduation.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </>
+                      )}
                     </div>
                     {data.unlockedCourses.length > 0 && (
                       <div className="text-xs font-normal text-purple-600 mt-1">
@@ -945,7 +908,7 @@ const EducationNetworkCalculator = () => {
               <div className="space-y-2">
                 {courses.map((course, index) => (
                   <div key={index} className="flex items-center gap-2">
-                    <label className="w-20 text-sm">{course.name}:</label>
+                    <label className="w-32 text-sm text-right">{course.name} Price / Reserve:</label>
                     <input
                       title="Course Price"
                       type="number"
